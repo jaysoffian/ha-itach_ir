@@ -250,7 +250,7 @@ class ITachRemote(RemoteEntity):
                 if step.pause:
                     await asyncio.sleep(step.pause)
 
-                data = " ".join(step.data.split())  # normalize whitespace
+                data = "".join(step.data.split())  # strip whitespace from YAML folding
 
                 for i in range(step.send_count):
                     await self._sendir(data)
@@ -295,7 +295,7 @@ class ITachRemote(RemoteEntity):
 
             try:
                 resp = await asyncio.wait_for(
-                    reader.readexactly(len(completeir)),
+                    reader.read(len(completeir)),
                     timeout=RESPONSE_TIMEOUT,
                 )
                 _LOGGER.debug("[iTach] %s <<< %r", self._attr_name, resp)
