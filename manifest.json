@@ -1,0 +1,8 @@
+{
+  "domain": "itach",
+  "name": "Global Caché iTach IR",
+  "version": "1.0.0",
+  "iot_class": "assumed_state",
+  "requirements": [],
+  "dependencies": []
+}
