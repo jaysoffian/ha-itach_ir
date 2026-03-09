@@ -3,6 +3,7 @@
 #   remote: !include itach.yaml
 
 - platform: itach
+  name: Home Theater iTach
   host: 192.168.1.197
   devices:
 

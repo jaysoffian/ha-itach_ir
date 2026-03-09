@@ -62,7 +62,7 @@ from dataclasses import dataclass
 import voluptuous as vol
 
 from homeassistant.components.remote import PLATFORM_SCHEMA, RemoteEntity
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 import homeassistant.helpers.config_validation as cv
 
 _LOGGER = logging.getLogger(__name__)
@@ -82,7 +82,9 @@ STEP_SCHEMA = vol.Schema(
         vol.Optional("interval", default=0.1): vol.All(
             vol.Coerce(float), vol.Range(min=0)
         ),
-        vol.Optional("pause", default=0): vol.All(vol.Coerce(float), vol.Range(min=0)),
+        vol.Optional("pause", default=0): vol.All(
+            vol.Coerce(float), vol.Range(min=0)
+        ),
     }
 )
 
@@ -112,6 +114,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_HOST): cv.string,
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
+        vol.Optional(CONF_NAME, default=None): vol.Any(cv.string, None),
         vol.Required(CONF_DEVICES): vol.All(cv.ensure_list, [DEVICE_SCHEMA]),
     }
 )
@@ -131,7 +134,6 @@ def _get_lock(host: str) -> asyncio.Lock:
 @dataclass
 class IRStep:
     """A single step in a command sequence."""
-
     data: str
     send_count: int = 1
     interval: float = 0.1
@@ -163,12 +165,14 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     """Set up iTach remote entities from configuration."""
     host = config[CONF_HOST]
     port = config[CONF_PORT]
+    itach_name = config.get(CONF_NAME) or host
 
     entities = [
         ITachRemote(
             name=device["name"],
             host=host,
             port=port,
+            itach_name=itach_name,
             commands={
                 cmd["name"]: _parse_command_data(cmd["data"])
                 for cmd in device[CONF_COMMANDS]
@@ -188,12 +192,17 @@ class ITachRemote(RemoteEntity):
         name: str,
         host: str,
         port: int,
+        itach_name: str,
         commands: dict[str, list[IRStep]],
     ) -> None:
         self._attr_name = name
         self._host = host
         self._port = port
         self._commands = commands
+        # Stable unique ID based on the iTach device name (not host IP) so
+        # that changing the IP does not orphan existing entities in HA.
+        # Falls back to host if no name is configured.
+        self._attr_unique_id = f"itach_{itach_name}_{name}".lower().replace(" ", "_")
         # Remote entities need an is_on state. Since iTach is stateless
         # (we have no way to query device state), we always report True
         # so the entity appears active and ready to accept commands.
@@ -299,8 +308,7 @@ class ITachRemote(RemoteEntity):
                     )
             except asyncio.TimeoutError:
                 _LOGGER.warning(
-                    "[iTach] %s: timed out waiting for completeir",
-                    self._attr_name,
+                    "[iTach] %s: timed out waiting for completeir", self._attr_name
                 )
             except asyncio.IncompleteReadError as e:
                 _LOGGER.error(
