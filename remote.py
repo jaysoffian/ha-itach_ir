@@ -55,14 +55,21 @@ To send a command from an automation or script:
     command: power_on
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 import voluptuous as vol
 
 from homeassistant.components.remote import PLATFORM_SCHEMA, RemoteEntity
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 import homeassistant.helpers.config_validation as cv
 
 _LOGGER = logging.getLogger(__name__)
@@ -82,9 +89,7 @@ STEP_SCHEMA = vol.Schema(
         vol.Optional("interval", default=0.1): vol.All(
             vol.Coerce(float), vol.Range(min=0)
         ),
-        vol.Optional("pause", default=0): vol.All(
-            vol.Coerce(float), vol.Range(min=0)
-        ),
+        vol.Optional("pause", default=0): vol.All(vol.Coerce(float), vol.Range(min=0)),
     }
 )
 
@@ -114,33 +119,25 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_HOST): cv.string,
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
-        vol.Optional(CONF_NAME, default=None): vol.Any(cv.string, None),
+        vol.Optional(CONF_NAME): cv.string,
         vol.Required(CONF_DEVICES): vol.All(cv.ensure_list, [DEVICE_SCHEMA]),
     }
 )
 
-# One lock per host, shared across all device entities on the same host.
-# Prevents concurrent sends from stomping on each other, matching the
-# mutex-per-device behavior in the JS implementation.
-_HOST_LOCKS: dict[str, asyncio.Lock] = {}
-
-
-def _get_lock(host: str) -> asyncio.Lock:
-    if host not in _HOST_LOCKS:
-        _HOST_LOCKS[host] = asyncio.Lock()
-    return _HOST_LOCKS[host]
+DATA_KEY = "itach_ir_locks"
 
 
 @dataclass
 class IRStep:
     """A single step in a command sequence."""
+
     data: str
     send_count: int = 1
     interval: float = 0.1
     pause: float = 0.0
 
 
-def _parse_command_data(data) -> list[IRStep]:
+def _parse_command_data(data: str | list[dict[str, Any]]) -> list[IRStep]:
     """
     Normalize command data to a list of IRStep regardless of input format.
 
@@ -161,14 +158,26 @@ def _parse_command_data(data) -> list[IRStep]:
     ]
 
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
     """Set up iTach remote entities from configuration."""
     host = config[CONF_HOST]
     port = config[CONF_PORT]
-    itach_name = config.get(CONF_NAME) or host
+    itach_name = config.get(CONF_NAME, host)
+
+    # One lock per host, shared across all device entities on the same host.
+    # Prevents concurrent sends from stomping on each other.
+    locks: dict[str, asyncio.Lock] = hass.data.setdefault(DATA_KEY, {})
+    if host not in locks:
+        locks[host] = asyncio.Lock()
 
     entities = [
         ITachRemote(
+            hass=hass,
             name=device["name"],
             host=host,
             port=port,
@@ -189,41 +198,31 @@ class ITachRemote(RemoteEntity):
 
     def __init__(
         self,
+        hass: HomeAssistant,
         name: str,
         host: str,
         port: int,
         itach_name: str,
         commands: dict[str, list[IRStep]],
     ) -> None:
+        self.hass = hass
         self._attr_name = name
         self._host = host
         self._port = port
         self._commands = commands
-        # Stable unique ID based on the iTach device name (not host IP) so
-        # that changing the IP does not orphan existing entities in HA.
-        # Falls back to host if no name is configured.
         self._attr_unique_id = f"itach_{itach_name}_{name}".lower().replace(" ", "_")
-        # Remote entities need an is_on state. Since iTach is stateless
-        # (we have no way to query device state), we always report True
-        # so the entity appears active and ready to accept commands.
         self._attr_is_on = True
 
-    async def async_turn_on(self, **kwargs):
-        """Required by RemoteEntity but not meaningful for a stateless IR blaster."""
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """No-op — iTach is a stateless IR blaster."""
 
-    async def async_turn_off(self, **kwargs):
-        """Required by RemoteEntity but not meaningful for a stateless IR blaster."""
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """No-op — iTach is a stateless IR blaster."""
 
-    async def async_send_command(self, command: list[str], **kwargs) -> None:
-        """
-        Send one or more named IR commands.
-
-        Supports the standard HA remote service call fields:
-          num_repeats: number of times to repeat the entire command sequence
-          delay_secs:  seconds to wait between top-level repeats
-        """
-        num_repeats = kwargs.get("num_repeats", 1)
-        delay_secs = kwargs.get("delay_secs", 0.5)
+    async def async_send_command(self, command: Iterable[str], **kwargs: Any) -> None:
+        """Send one or more named IR commands."""
+        num_repeats: int = kwargs.get("num_repeats", 1)
+        delay_secs: float = kwargs.get("delay_secs", 0.5)
 
         for i in range(num_repeats):
             if i > 0 and delay_secs:
@@ -243,7 +242,8 @@ class ITachRemote(RemoteEntity):
             )
             return
 
-        async with _get_lock(self._host):
+        lock: asyncio.Lock = self.hass.data[DATA_KEY][self._host]
+        async with lock:
             for step in steps:
                 # Optional pause before this step (e.g. waiting for device
                 # to be ready after a previous command)
@@ -306,15 +306,9 @@ class ITachRemote(RemoteEntity):
                         resp,
                         completeir,
                     )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.warning(
                     "[iTach] %s: timed out waiting for completeir", self._attr_name
-                )
-            except asyncio.IncompleteReadError as e:
-                _LOGGER.error(
-                    "[iTach] %s: connection closed before completeir: %r",
-                    self._attr_name,
-                    e.partial,
                 )
 
         except Exception as e:
