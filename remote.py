@@ -68,9 +68,9 @@ import voluptuous as vol
 from homeassistant.components.remote import PLATFORM_SCHEMA, RemoteEntity
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-import homeassistant.helpers.config_validation as cv
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -150,9 +150,9 @@ def _parse_command_data(data: str | list[dict[str, Any]]) -> list[IRStep]:
     return [
         IRStep(
             data=step["data"],
-            send_count=step.get("send_count", 1),
-            interval=step.get("interval", 0.1),
-            pause=step.get("pause", 0),
+            send_count=step["send_count"],
+            interval=step["interval"],
+            pause=step["pause"],
         )
         for step in data
     ]
@@ -261,6 +261,8 @@ class ITachRemote(RemoteEntity):
         """
         Open a TCP connection to the iTach and send a sendir command.
 
+        data is a GC sendir body: "<connaddr>,<ID>,<freq>,<repeat>,<offset>,<on>,<off>,..."
+
         Sends:    sendir,<data>\r
         Expects:  completeir,<connaddr>,<ID>\r
         """
@@ -268,7 +270,7 @@ class ITachRemote(RemoteEntity):
         # e.g. "1:1" and "0" from "1:1,0,38000,..."
         fields = data.split(",", 2)
         if len(fields) < 2:
-            _LOGGER.error("[iTach] %s: malformed data %r", self._attr_name, data)
+            _LOGGER.error("[iTach] %s: malformed sendir data %r", self._attr_name, data)
             return
 
         connector_address, command_id = fields[0], fields[1]
@@ -286,26 +288,26 @@ class ITachRemote(RemoteEntity):
             writer.write(sendir)
             await writer.drain()
 
-            try:
-                resp = await asyncio.wait_for(
-                    reader.read(len(completeir)),
-                    timeout=RESPONSE_TIMEOUT,
-                )
-                _LOGGER.debug("[iTach] %s <<< %r", self._attr_name, resp)
-                if resp != completeir:
-                    _LOGGER.error(
-                        "[iTach] %s: unexpected response %r (expected %r)",
-                        self._attr_name,
-                        resp,
-                        completeir,
-                    )
-            except TimeoutError:
-                _LOGGER.warning(
-                    "[iTach] %s: timed out waiting for completeir", self._attr_name
+            resp = await asyncio.wait_for(
+                reader.readuntil(b"\r"),
+                timeout=RESPONSE_TIMEOUT,
+            )
+            _LOGGER.debug("[iTach] %s <<< %r", self._attr_name, resp)
+            if resp != completeir:
+                _LOGGER.error(
+                    "[iTach] %s: unexpected response %r (expected %r)",
+                    self._attr_name,
+                    resp,
+                    completeir,
                 )
 
         except Exception as e:
-            _LOGGER.error("[iTach] %s: send failed: %s", self._attr_name, e)
+            _LOGGER.error(
+                "[iTach] %s: sendir failed: %s: %s",
+                self._attr_name,
+                type(e).__name__,
+                e,
+            )
 
         finally:
             if writer is not None:
