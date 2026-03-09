@@ -263,13 +263,6 @@ class ITachRemote(RemoteEntity):
 
         Sends:    sendir,<data>\r
         Expects:  completeir,<connaddr>,<ID>\r
-
-        Uses latin-1 encoding (not ascii) to safely handle any high bytes
-        that may appear in learned IR codes.
-
-        Mirrors the JS implementation: reads exactly as many bytes as the
-        expected completeir response rather than using readline(), and does
-        a hard close (abort) rather than a graceful shutdown.
         """
         # connaddr and command ID are the first two comma-separated fields,
         # e.g. "1:1" and "0" from "1:1,0,38000,..."
@@ -279,8 +272,8 @@ class ITachRemote(RemoteEntity):
             return
 
         connector_address, command_id = fields[0], fields[1]
-        sendir = f"sendir,{data}\r".encode("latin-1")
-        completeir = f"completeir,{connector_address},{command_id}\r".encode("latin-1")
+        sendir = f"sendir,{data}\r".encode("ascii")
+        completeir = f"completeir,{connector_address},{command_id}\r".encode("ascii")
 
         writer = None
         try:
@@ -315,6 +308,6 @@ class ITachRemote(RemoteEntity):
             _LOGGER.error("[iTach] %s: send failed: %s", self._attr_name, e)
 
         finally:
-            # Hard close matching JS sock.destroy()
             if writer is not None:
-                writer.transport.abort()
+                writer.close()
+                await writer.wait_closed()
