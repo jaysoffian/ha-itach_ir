@@ -72,11 +72,9 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-_LOGGER = logging.getLogger(__name__)
+from .client import DEFAULT_PORT, ITachClient  # ty: ignore[unresolved-import]
 
-DEFAULT_PORT = 4998
-CONNECT_TIMEOUT = 10.0
-RESPONSE_TIMEOUT = 10.0
+_LOGGER = logging.getLogger(__name__)
 
 CONF_DEVICES = "devices"
 CONF_COMMANDS = "commands"
@@ -208,8 +206,8 @@ class ITachRemote(RemoteEntity):
         self.hass = hass
         self._attr_name = name
         self._host = host
-        self._port = port
         self._commands = commands
+        self._client = ITachClient(host, port, name)
         self._attr_unique_id = f"itach_{itach_name}_{name}".lower().replace(" ", "_")
         self._attr_is_on = True
 
@@ -253,63 +251,6 @@ class ITachRemote(RemoteEntity):
                 data = "".join(step.data.split())  # strip whitespace from YAML folding
 
                 for i in range(step.send_count):
-                    await self._sendir(data)
+                    await self._client.sendir(data)
                     if step.send_count > 1 and i < step.send_count - 1:
                         await asyncio.sleep(step.interval)
-
-    async def _sendir(self, data: str) -> None:
-        """
-        Open a TCP connection to the iTach and send a sendir command.
-
-        data is a GC sendir body: "<connaddr>,<ID>,<freq>,<repeat>,<offset>,<on>,<off>,..."
-
-        Sends:    sendir,<data>\r
-        Expects:  completeir,<connaddr>,<ID>\r
-        """
-        # connaddr and command ID are the first two comma-separated fields,
-        # e.g. "1:1" and "0" from "1:1,0,38000,..."
-        fields = data.split(",", 2)
-        if len(fields) < 2:
-            _LOGGER.error("[iTach] %s: malformed sendir data %r", self._attr_name, data)
-            return
-
-        connector_address, command_id = fields[0], fields[1]
-        sendir = f"sendir,{data}\r".encode("ascii")
-        completeir = f"completeir,{connector_address},{command_id}\r".encode("ascii")
-
-        writer = None
-        try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(self._host, self._port),
-                timeout=CONNECT_TIMEOUT,
-            )
-
-            _LOGGER.debug("[iTach] %s >>> %r", self._attr_name, sendir)
-            writer.write(sendir)
-            await writer.drain()
-
-            resp = await asyncio.wait_for(
-                reader.readuntil(b"\r"),
-                timeout=RESPONSE_TIMEOUT,
-            )
-            _LOGGER.debug("[iTach] %s <<< %r", self._attr_name, resp)
-            if resp != completeir:
-                _LOGGER.error(
-                    "[iTach] %s: unexpected response %r (expected %r)",
-                    self._attr_name,
-                    resp,
-                    completeir,
-                )
-
-        except Exception as e:
-            _LOGGER.error(
-                "[iTach] %s: sendir failed: %s: %s",
-                self._attr_name,
-                type(e).__name__,
-                e,
-            )
-
-        finally:
-            if writer is not None:
-                writer.close()
-                await writer.wait_closed()
