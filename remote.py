@@ -6,7 +6,7 @@ Accepts GC sendir format data strings natively — no Pronto conversion.
 Example configuration.yaml:
 
     remote:
-      - platform: itach
+      - platform: itach_ir
         host: 192.168.1.197
         devices:
           - name: JVC DLA
@@ -208,7 +208,7 @@ class ITachRemote(RemoteEntity):
         self._host = host
         self._commands = commands
         self._client = ITachClient(host, port, name)
-        self._attr_unique_id = f"itach_{itach_name}_{name}".lower().replace(" ", "_")
+        self._attr_unique_id = f"itach_ir_{itach_name}_{name}".lower().replace(" ", "_")
         self._attr_is_on = True
 
     async def async_turn_on(self, **kwargs: Any) -> None:

@@ -1,8 +1,8 @@
 # Global Caché iTach IR
 # Include in configuration.yaml with:
-#   remote: !include itach.yaml
+#   remote: !include itach_ir.yaml
 
-- platform: itach
+- platform: itach_ir
   name: Home Theater iTach
   host: 192.168.1.197
   devices:
