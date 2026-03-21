@@ -66,10 +66,11 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components.remote import PLATFORM_SCHEMA, RemoteEntity
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, STATE_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .client import DEFAULT_PORT, ITachClient  # ty: ignore[unresolved-import]
@@ -191,7 +192,7 @@ async def async_setup_platform(
     async_add_entities(entities)
 
 
-class ITachRemote(RemoteEntity):
+class ITachRemote(RemoteEntity, RestoreEntity):
     """Represents a collection of IR commands sent via a Global Caché iTach."""
 
     def __init__(
@@ -209,15 +210,25 @@ class ITachRemote(RemoteEntity):
         self._commands = commands
         self._client = ITachClient(host, port, name)
         self._attr_unique_id = f"itach_ir_{itach_name}_{name}".lower().replace(" ", "_")
-        self._attr_is_on = True
+        self._attr_is_on = False
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last known on/off state."""
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._attr_is_on = last_state.state == STATE_ON
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Send the 'turn_on' command if configured, otherwise no-op."""
+        self._attr_is_on = True
+        self.async_write_ha_state()
         if "turn_on" in self._commands:
             await self._send("turn_on")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Send the 'turn_off' command if configured, otherwise no-op."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
         if "turn_off" in self._commands:
             await self._send("turn_off")
 
