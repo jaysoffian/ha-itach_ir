@@ -212,10 +212,14 @@ class ITachRemote(RemoteEntity):
         self._attr_is_on = True
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """No-op — iTach is a stateless IR blaster."""
+        """Send the 'turn_on' command if configured, otherwise no-op."""
+        if "turn_on" in self._commands:
+            await self._send("turn_on")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """No-op — iTach is a stateless IR blaster."""
+        """Send the 'turn_off' command if configured, otherwise no-op."""
+        if "turn_off" in self._commands:
+            await self._send("turn_off")
 
     async def async_send_command(self, command: Iterable[str], **kwargs: Any) -> None:
         """Send one or more named IR commands."""
