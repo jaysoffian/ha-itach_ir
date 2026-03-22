@@ -53,6 +53,10 @@ To send a command from an automation or script:
     entity_id: remote.jvc_dla
   data:
     command: power_on
+
+Pseudo-commands that update entity state without sending IR:
+  state_on  — set entity state to on
+  state_off — set entity state to off
 """
 
 from __future__ import annotations
@@ -236,7 +240,12 @@ class ITachRemote(RemoteEntity, RestoreEntity):
             await self._send("turn_off")
 
     async def async_send_command(self, command: Iterable[str], **kwargs: Any) -> None:
-        """Send one or more named IR commands."""
+        """Send one or more named IR commands.
+
+        Special pseudo-commands that update state without sending IR:
+          state_on  — set entity state to on
+          state_off — set entity state to off
+        """
         num_repeats: int = kwargs.get("num_repeats", 1)
         delay_secs: float = kwargs.get("delay_secs", 0.5)
 
@@ -244,7 +253,14 @@ class ITachRemote(RemoteEntity, RestoreEntity):
             if i > 0 and delay_secs:
                 await asyncio.sleep(delay_secs)
             for cmd in command:
-                await self._send(cmd)
+                if cmd == "state_on":
+                    self._attr_is_on = True
+                    self.async_write_ha_state()
+                elif cmd == "state_off":
+                    self._attr_is_on = False
+                    self.async_write_ha_state()
+                else:
+                    await self._send(cmd)
 
     async def _send(self, command: str) -> None:
         """Look up and execute a named command's step sequence."""

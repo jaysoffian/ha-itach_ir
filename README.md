@@ -142,6 +142,32 @@ The easiest way to find GC format codes for your devices is to register at
 the database codes don't work, use the iTach's built-in IR learning mode and copy the learned
 `sendir` string directly — no conversion needed.
 
+### Pseudo-commands: `state_on` and `state_off`
+
+The pseudo-commands `state_on` and `state_off` update the entity's on/off state
+without sending any IR. This is useful when a device's power state is controlled
+by another integration and you want to keep the remote entity in sync.
+
+For example, if a Denon AVR is turned off via the `denonavr` integration (or
+becomes unavailable), you can sync the iTach remote's state with an automation:
+
+```yaml
+alias: Sync iTach Denon AVR Remote Switch State
+description: ""
+triggers:
+  - trigger: state
+    entity_id: media_player.theater_denon_avr
+    to:
+      - "off"
+      - unavailable
+actions:
+  - action: remote.send_command
+    target:
+      entity_id: remote.theater_itach_denon_avr
+    data:
+      command: state_off
+```
+
 ## Sending commands
 
 Use the standard `remote.send_command` service:
