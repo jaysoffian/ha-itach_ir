@@ -344,7 +344,7 @@ export ITACH_HOST=192.168.1.197
 
 ### Learning IR codes
 
-Point your remote at the iTach's IR learner port and run:
+Point your remote at the [iTach's IR learner port](https://globalcache.zendesk.com/hc/en-us/articles/360034920131-iLearn-Learning-Basics) and run:
 
 ```bash
 ./cli.py learn
