@@ -1,12 +1,14 @@
 # Home Assistant Global Caché iTach IR (Custom Component)
 
-This custom component replaces Home Assistant's built-in `itach` integration
-with one that accepts **GC sendir format data strings natively**, eliminating
-the lossy Pronto hex conversion that the built-in integration requires.
+This integration connects your Global Caché iTach IP2IR to your Home Assistant installation.
 
-If you have learned IR codes, or codes sourced directly from Global Caché's
-[Control Tower IR database](https://irdb.globalcache.com), you can use them
-verbatim without any conversion.
+This is an alternative to HA's built-in `itach` integration.
+
+This integration accepts the native **sendir** data format, eliminating the lossy Pronto hex
+conversion that the built-in integration requires.
+
+If you have learned IR codes, or codes sourced directly from Global Caché's [Control Tower
+IR database](https://irdb.globalcache.com), you can use them verbatim without any conversion.
 
 ## Requirements
 
@@ -17,23 +19,18 @@ verbatim without any conversion.
 
 ## Installation
 
-Copy the `itach/` folder into your Home Assistant `custom_components` directory:
+### HACS
 
-```
-/config/
-  configuration.yaml
-  custom_components/
-    itach/
-      __init__.py
-      manifest.json
-      remote.py
-      README.md
-```
+1. Install [HACS](https://hacs.xyz)
+2. Open HACS → Integrations
+3. Open triple-dot menu ( ⠇) → Custom repositories
+4. Add this repository's URL (`https://github.com/jaysoffian/ha-itach-ir`), category "Integration"
+5. Install this integration and restart Home Assistant
 
-Where `/config` is whatever host path you have mounted into the Home Assistant
-container. Since `custom_components/itach` shadows the built-in `itach`
-integration by the same name, no other changes are needed. Restart Home
-Assistant after copying the files.
+
+### Manual
+
+Copy `custom_components/itach_ir` into your Home Assistant `custom_components` directory and restart.
 
 ## Configuration
 
@@ -47,7 +44,7 @@ remote:
     devices:
       - name: JVC DLA
         commands:
-          - name: power_on
+          - name: turn_on
             data: >-
               1:1,0,38000,1,37,319,160,20,60,20,60,20,20,20,20,
               20,60,20,60,20,60,20,20,20,60,20,20,20,60,20,20,
@@ -55,7 +52,7 @@ remote:
 
       - name: Denon
         commands:
-          - name: power_on
+          - name: turn_on
             # Send twice with 0.1s between sends
             data:
               - data: >-
@@ -63,16 +60,16 @@ remote:
                   16,49,16,16,16,49,16,16,16,16,16,49,16,2846
                 send_count: 2
                 interval: 0.1
-          - name: power_off
+          - name: turn_off
             data: >-
               1:1,1,38000,1,1,10,30,10,70,10,30,10,30,10,1657
 
       - name: Lumagen
         commands:
-          - name: power_on
+          - name: turn_on
             data: >-
               1:1,0,38000,1,1,16,96,16,96,16,192,16,415
-          - name: power_off
+          - name: turn_off
             data: >-
               1:1,1,38000,1,1,16,96,16,96,16,192,16,415
 ```
