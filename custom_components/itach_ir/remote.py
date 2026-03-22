@@ -247,7 +247,7 @@ class ITachRemote(RemoteEntity, RestoreEntity):
         steps = self._commands.get(command)
         if steps is None:
             _LOGGER.error(
-                "[iTach] %s: unknown command %r (known: %s)",
+                "%s: unknown command %r (known: %s)",
                 self._attr_name,
                 command,
                 ", ".join(self._commands),

@@ -103,9 +103,7 @@ class ITachClient:
         self._reader = None
         self._writer = None
 
-        _LOGGER.debug(
-            "[iTach] %s: connecting to %s:%s", self._name, self._host, self._port
-        )
+        _LOGGER.debug("%s: connecting to %s:%s", self._name, self._host, self._port)
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(self._host, self._port),
@@ -113,7 +111,7 @@ class ITachClient:
             )
         except Exception as e:
             _LOGGER.error(
-                "[iTach] %s: failed to connect to %s:%s: %s: %s",
+                "%s: failed to connect to %s:%s: %s: %s",
                 self._name,
                 self._host,
                 self._port,
@@ -137,7 +135,7 @@ class ITachClient:
         """Close the connection after idle timeout."""
         self._idle_handle = None
         if self._writer is not None and not self._writer.is_closing():
-            _LOGGER.debug("[iTach] %s: closing idle connection", self._name)
+            _LOGGER.debug("%s: closing idle connection", self._name)
             self._writer.close()
         self._reader = None
         self._writer = None
@@ -164,7 +162,7 @@ class ITachClient:
             return ""
 
         payload = f"{command}\r".encode("ascii")
-        _LOGGER.debug("[iTach] %s >>> %r", self._name, payload)
+        _LOGGER.debug("%s >>> %r", self._name, payload)
 
         try:
             writer.write(payload)
@@ -174,7 +172,7 @@ class ITachClient:
             )
         except Exception as e:
             _LOGGER.error(
-                "[iTach] %s: communication error: %s: %s",
+                "%s: communication error: %s: %s",
                 self._name,
                 type(e).__name__,
                 e,
@@ -184,7 +182,7 @@ class ITachClient:
 
         self._reset_idle_timer()
         decoded = resp.decode("ascii").rstrip("\r")
-        _LOGGER.debug("[iTach] %s <<< %r", self._name, decoded)
+        _LOGGER.debug("%s <<< %r", self._name, decoded)
         return decoded
 
     async def send(self, command: str) -> str:
@@ -247,7 +245,7 @@ class ITachClient:
         """
         fields = data.split(",", 2)
         if len(fields) < 2:
-            _LOGGER.error("[iTach] %s: malformed sendir data %r", self._name, data)
+            _LOGGER.error("%s: malformed sendir data %r", self._name, data)
             return
 
         connector_address, command_id = fields[0], fields[1]
@@ -259,7 +257,7 @@ class ITachClient:
 
         if resp != expected:
             _LOGGER.error(
-                "[iTach] %s: %s",
+                "%s: %s",
                 self._name,
                 _format_error(resp),
             )
