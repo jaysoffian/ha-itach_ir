@@ -122,13 +122,14 @@ def learn() -> None:
 
     async def _learn() -> None:
         client = _client()
-        try:
-            async for line in client.learn():
-                typer.echo(line)
-        except KeyboardInterrupt:
-            pass
+        async for line in client.learn():
+            typer.echo(line)
 
-    asyncio.run(_learn())
+    typer.echo("Entering learning mode — press Ctrl-C to stop.")
+    try:
+        asyncio.run(_learn())
+    except KeyboardInterrupt:
+        typer.echo("\nStopped learning mode.")
 
 
 @cli.command()
