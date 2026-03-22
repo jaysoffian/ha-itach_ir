@@ -122,7 +122,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(  # type: ignore[reportConstantRedefini
     }
 )
 
-DATA_KEY = "itach_ir_locks"
+DATA_KEY = "itach_ir_hosts"
 
 
 @dataclass
@@ -144,10 +144,10 @@ def _parse_command_data(data: str | list[dict[str, Any]]) -> list[IRStep]:
       - A list of dicts → one step per dict
     """
     if isinstance(data, str):
-        return [IRStep(data=data)]
+        return [IRStep(data="".join(data.split()))]
     return [
         IRStep(
-            data=step["data"],
+            data="".join(step["data"].split()),
             send_count=step["send_count"],
             interval=step["interval"],
             pause=step["pause"],
@@ -167,19 +167,23 @@ async def async_setup_platform(
     port = config[CONF_PORT]
     itach_name = config.get(CONF_NAME, host)
 
-    # One lock per host, shared across all device entities on the same host.
-    # Prevents concurrent sends from stomping on each other.
-    locks: dict[str, asyncio.Lock] = hass.data.setdefault(DATA_KEY, {})
-    if host not in locks:
-        locks[host] = asyncio.Lock()
+    # One lock and one client per host, shared across all device entities.
+    # Prevents concurrent sends from stomping on each other and avoids
+    # opening multiple TCP connections to the same iTach.
+    hosts: dict[str, tuple[asyncio.Lock, ITachClient]] = hass.data.setdefault(
+        DATA_KEY, {}
+    )
+    if host not in hosts:
+        hosts[host] = (asyncio.Lock(), ITachClient(host, port, host))
+    lock, client = hosts[host]
 
     entities = [
         ITachRemote(
             hass=hass,
             name=device["name"],
-            host=host,
-            port=port,
             itach_name=itach_name,
+            lock=lock,
+            client=client,
             commands={
                 cmd["name"]: _parse_command_data(cmd["data"])
                 for cmd in device[CONF_COMMANDS]
@@ -198,16 +202,16 @@ class ITachRemote(RemoteEntity, RestoreEntity):
         self,
         hass: HomeAssistant,
         name: str,
-        host: str,
-        port: int,
         itach_name: str,
+        lock: asyncio.Lock,
+        client: ITachClient,
         commands: dict[str, list[IRStep]],
     ) -> None:
         self.hass = hass
         self._attr_name = name
-        self._host = host
+        self._lock = lock
+        self._client = client
         self._commands = commands
-        self._client = ITachClient(host, port, name)
         self._attr_unique_id = f"itach_ir_{itach_name}_{name}".lower().replace(" ", "_")
         self._attr_is_on = False
 
@@ -254,17 +258,14 @@ class ITachRemote(RemoteEntity, RestoreEntity):
             )
             return
 
-        lock: asyncio.Lock = self.hass.data[DATA_KEY][self._host]
-        async with lock:
+        async with self._lock:
             for step in steps:
                 # Optional pause before this step (e.g. waiting for device
                 # to be ready after a previous command)
                 if step.pause:
                     await asyncio.sleep(step.pause)
 
-                data = "".join(step.data.split())  # strip whitespace from YAML folding
-
                 for i in range(step.send_count):
-                    await self._client.sendir(data)
+                    await self._client.sendir(step.data)
                     if step.send_count > 1 and i < step.send_count - 1:
                         await asyncio.sleep(step.interval)
