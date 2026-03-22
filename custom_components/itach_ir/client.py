@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,11 +21,75 @@ class ITachClient:
         self._port = port
         self._name = name or host
 
+    async def send(self, command: str) -> str:
+        """Send a command and return the response line."""
+        writer = None
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self._host, self._port),
+                timeout=CONNECT_TIMEOUT,
+            )
+            payload = f"{command}\r".encode("ascii")
+            _LOGGER.debug("[iTach] %s >>> %r", self._name, payload)
+            writer.write(payload)
+            await writer.drain()
+            resp = await asyncio.wait_for(
+                reader.readuntil(b"\r"), timeout=RESPONSE_TIMEOUT
+            )
+            _LOGGER.debug("[iTach] %s <<< %r", self._name, resp)
+            return resp.decode("ascii").rstrip("\r")
+        finally:
+            if writer is not None:
+                writer.close()
+                await writer.wait_closed()
+
+    async def getdevices(self) -> str:
+        """Query connected modules."""
+        return await self.send("getdevices")
+
+    async def getversion(self) -> str:
+        """Query firmware version."""
+        return await self.send("getversion")
+
+    async def learn(self) -> AsyncIterator[str]:
+        """Start IR learning mode and yield received IR strings.
+
+        Sends get_IRL, then yields each response line until the caller
+        breaks out of the iterator (which sends stop_IRL).
+        """
+        writer = None
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self._host, self._port),
+                timeout=CONNECT_TIMEOUT,
+            )
+            writer.write(b"get_IRL\r")
+            await writer.drain()
+            while True:
+                line = await reader.readuntil(b"\r")
+                yield line.decode("ascii").rstrip("\r")
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if writer is not None:
+                # Best-effort stop before closing
+                try:
+                    writer.write(b"stop_IRL\r")
+                    await writer.drain()
+                except OSError:
+                    pass
+                writer.close()
+                await writer.wait_closed()
+
+    async def stop_learn(self) -> str:
+        """Send stop_IRL on a fresh connection (useful if learn is on another)."""
+        return await self.send("stop_IRL")
+
     async def sendir(self, data: str) -> None:
         """
         Open a TCP connection to the iTach and send a sendir command.
 
-        data is a GC sendir body: "<connaddr>,<ID>,<freq>,<repeat>,<offset>,<on>,<off>,..."
+        data: "<connaddr>,<ID>,<freq>,<repeat>,<offset>,<on>,<off>,..."
 
         Sends:    sendir,<data>\r
         Expects:  completeir,<connaddr>,<ID>\r

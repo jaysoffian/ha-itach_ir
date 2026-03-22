@@ -1,8 +1,8 @@
 {
+  "dependencies": [],
   "domain": "itach_ir",
-  "name": "Global Caché iTach IR",
-  "version": "1.0.0",
   "iot_class": "assumed_state",
+  "name": "Global Cach\u00e9 iTach IR",
   "requirements": [],
-  "dependencies": []
+  "version": "1.0.0"
 }

@@ -64,7 +64,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components.remote import PLATFORM_SCHEMA, RemoteEntity
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, STATE_ON
 from homeassistant.core import HomeAssistant
@@ -114,7 +113,7 @@ DEVICE_SCHEMA = vol.Schema(
     }
 )
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(  # type: ignore[reportConstantRedefinition]
     {
         vol.Required(CONF_HOST): cv.string,
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
