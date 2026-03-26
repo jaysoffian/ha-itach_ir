@@ -16,11 +16,15 @@ A basic [CLI](#cli) is also provided to assist with learning codes directly with
 
 ### HACS
 
-1. Install [HACS](https://hacs.xyz)
-2. Open HACS → Integrations
-3. Open triple-dot menu ( ⠇) → Custom repositories
-4. Add this repository's URL (`https://github.com/jaysoffian/ha-itach-ir`), category "Integration"
-5. Install this integration and restart Home Assistant
+1. Install [HACS](https://hacs.xyz), then either:
+   1. [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jaysoffian&repository=ha-itach_ir=integration)
+
+   Or:
+
+   1. Open HACS → Integrations
+   2. Open triple-dot menu ( ⠇) → Custom repositories
+   3. Add this repository's URL (`https://github.com/jaysoffian/ha-itach_ir`), category "Integration"
+2. Install this integration and restart Home Assistant
 
 ### Manual
 
